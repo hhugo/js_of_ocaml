@@ -137,6 +137,33 @@ end = struct
 
   include T
 
+  let names : (int, string) Hashtbl.t = Hashtbl.create 17
+
+  let name v nm_orig =
+    let len = String.length nm_orig in
+    if len > 0
+    then (
+      let buf = Buffer.create (String.length nm_orig) in
+      let idx = ref 0 in
+      while !idx < len && not (Char.is_alpha nm_orig.[!idx]) do
+        incr idx
+      done;
+      let pending = ref false in
+      if !idx >= len
+      then (
+        pending := true;
+        idx := 0);
+      for i = !idx to len - 1 do
+        if Char.is_alpha nm_orig.[i] || Char.is_num nm_orig.[i]
+        then (
+          if !pending then Buffer.add_char buf '_';
+          Buffer.add_char buf nm_orig.[i];
+          pending := false)
+        else pending := true
+      done;
+      let str = Buffer.contents buf in
+      if String.length str > 0 then Hashtbl.add names v str)
+
   let printer = VarPrinter.create VarPrinter.Alphabet.javascript
 
   let locations = Hashtbl.create 17
@@ -153,8 +180,6 @@ end = struct
   let print f x = Format.fprintf f "v%d" x
 
   (* Format.fprintf f "%s" (to_string x) *)
-
-  let name i nm = VarPrinter.name printer i nm
 
   let loc i pi = Hashtbl.add locations i pi
 
@@ -179,10 +204,12 @@ end = struct
 
   let of_idx v = v
 
-  let get_name i = VarPrinter.get_name printer i
+  let get_name i = try Some (Hashtbl.find names i) with Not_found -> None
 
   let propagate_name i j =
-    VarPrinter.propagate_name printer i j;
+    (match get_name i with
+    | Some name -> Hashtbl.add names j name
+    | None -> ());
     match get_loc i with
     | None -> ()
     | Some l -> loc j l

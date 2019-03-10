@@ -32,7 +32,8 @@ module type Strategy = sig
 
   val record_block : t -> Js_traverse.t -> catch:bool -> Javascript.ident list -> unit
 
-  val allocate_variables : t -> count:int Javascript.IdentMap.t -> string array
+  val allocate_variables :
+    t -> (Var.t -> string) -> count:int Javascript.IdentMap.t -> string array
 end
 
 module Min : Strategy = struct
@@ -175,7 +176,7 @@ while compiling the OCaml toplevel:
    *     ((a, b, c) : (string * int) list * string list list * string list);
    *   close_out ch *)
 
-  let allocate_variables t ~count =
+  let allocate_variables t to_string ~count =
     let weight v = try IdentMap.find (V (Var.of_idx v)) count with Not_found -> 0 in
     let constr = t.constr in
     let len = Array.length constr in
@@ -197,9 +198,7 @@ while compiling the OCaml toplevel:
         n2 := !n2 + weight i);
       n3 := !n3 + weight i
     in
-    let nm ~origin n =
-      name.(origin) <- Var.to_string ~origin:(Var.of_idx origin) (Var.of_idx n)
-    in
+    let nm ~origin n = name.(origin) <- to_string (Var.of_idx n) in
     let total = ref 0 in
     let bad = ref 0 in
     for i = 0 to Array.length t.parameters - 1 do
@@ -298,7 +297,7 @@ module Preserve : Strategy = struct
     in
     t.scopes <- (defs, scope) :: t.scopes
 
-  let allocate_variables t ~count:_ =
+  let allocate_variables t to_string ~count:_ =
     let names = Array.make t.size "" in
     List.iter t.scopes ~f:(fun (defs, state) ->
         let assigned =
@@ -333,7 +332,7 @@ module Preserve : Strategy = struct
                         incr i
                       done;
                       Printf.sprintf "%s$%d" expected_name !i
-                | None -> Var.to_string var
+                | None -> to_string var
               in
               names.(Var.idx var) <- name;
               StringSet.add name assigned)
@@ -353,17 +352,31 @@ class traverse record_block =
       super#block params
   end
 
-let program' (module Strategy : Strategy) p =
+let program' ~reserved (module Strategy : Strategy) p =
   let nv = Var.count () in
   let state = Strategy.create nv in
   let mapper = new traverse (Strategy.record_block state) in
+  let is_reserved x = StringSet.mem x reserved in
+  let assign =
+    let known = Hashtbl.create 17 in
+    let last = ref (-1) in
+    let rec loop i =
+      incr last;
+      let j = !last in
+      let s = VarPrinter.Alphabet.to_string VarPrinter.Alphabet.javascript j in
+      if is_reserved s then loop i else ( Hashtbl.add known i s; s )
+    in
+    loop
+  in
   let p = mapper#program p in
   mapper#block [];
   if S.cardinal mapper#get_free <> 0
   then
     failwith_ "Some variables escaped (#%d)" (S.cardinal mapper#get_free)
     (* S.iter(fun s -> (Format.eprintf "%s@." (Var.to_string s))) coloring#get_free *);
-  let names = Strategy.allocate_variables state ~count:mapper#state.Js_traverse.count in
+  let names =
+    Strategy.allocate_variables state assign ~count:mapper#state.Js_traverse.count
+  in
   (* if debug () then output_debug_information state coloring#state.Js_traverse.count; *)
   let color = function
     | V v ->
@@ -374,7 +387,7 @@ let program' (module Strategy : Strategy) p =
   in
   (new Js_traverse.subst color)#program p
 
-let program p =
+let program ~reserved p =
   if Config.Flag.shortvar ()
-  then program' (module Min) p
-  else program' (module Preserve) p
+  then program' ~reserved (module Min) p
+  else program' ~reserved (module Preserve) p

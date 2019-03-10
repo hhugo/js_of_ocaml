@@ -54,54 +54,12 @@ module Alphabet = struct
 end
 
 type t =
-  { names : (int, string) Hashtbl.t
-  ; known : (int, string) Hashtbl.t
+  { known : (int, string) Hashtbl.t
   ; cache : (int * int, string) Hashtbl.t
   ; alphabet : Alphabet.t
   ; mutable last : int
   ; mutable pretty : bool
   ; mutable stable : bool }
-
-let name_raw t v nm = Hashtbl.add t.names v nm
-
-let propagate_name t v v' =
-  try
-    let name = Hashtbl.find t.names v in
-    name_raw t v' name
-    (* ;
-     * (try
-     *    let n = Hashtbl.find t.names v' in
-     *    if n <> name
-     *    then Printf.eprintf "erasing name %s by %s\n%!" n name
-     *  with _ -> ()) *)
-  with Not_found -> ()
-
-let name t v nm_orig =
-  let len = String.length nm_orig in
-  if len > 0
-  then (
-    let buf = Buffer.create (String.length nm_orig) in
-    let idx = ref 0 in
-    while !idx < len && not (Char.is_alpha nm_orig.[!idx]) do
-      incr idx
-    done;
-    let pending = ref false in
-    if !idx >= len
-    then (
-      pending := true;
-      idx := 0);
-    for i = !idx to len - 1 do
-      if Char.is_alpha nm_orig.[i] || Char.is_num nm_orig.[i]
-      then (
-        if !pending then Buffer.add_char buf '_';
-        Buffer.add_char buf nm_orig.[i];
-        pending := false)
-      else pending := true
-    done;
-    let str = Buffer.contents buf in
-    if String.length str > 0 then name_raw t v str)
-
-let get_name t v = try Some (Hashtbl.find t.names v) with Not_found -> None
 
 let format_var t i x =
   let s = Alphabet.to_string t.alphabet x in
@@ -111,21 +69,9 @@ let format_var t i x =
   then Format.sprintf "_%s_" s
   else s
 
-let reserved = ref StringSet.empty
+let is_reserved _ = false
 
-let add_reserved s =
-  reserved := List.fold_left s ~init:!reserved ~f:(fun acc x -> StringSet.add x acc)
-
-let _ = reserved := StringSet.union !reserved Reserved.keyword
-
-(* ; *)
-(* add_reserved Reserved.provided *)
-
-let get_reserved () = !reserved
-
-let is_reserved s = StringSet.mem s !reserved
-
-let rec to_string t ?origin i =
+let rec to_string t ?names ?origin i =
   let origin =
     match origin with
     | Some i when t.pretty -> i
@@ -149,8 +95,11 @@ let rec to_string t ?origin i =
       if t.pretty
       then
         try
-          let nm = Hashtbl.find t.names origin in
-          nm ^ name
+          match names with
+          | None -> name
+          | Some names ->
+              let nm = Hashtbl.find names origin in
+              nm ^ name
         with Not_found -> name
       else name
     in
@@ -162,15 +111,13 @@ let set_pretty t b = t.pretty <- b
 let set_stable t b = t.stable <- b
 
 let reset t =
-  Hashtbl.clear t.names;
   Hashtbl.clear t.known;
   Hashtbl.clear t.cache;
   t.last <- -1
 
 let create ?(pretty = false) ?(stable = false) alphabet =
   let t =
-    { names = Hashtbl.create 107
-    ; known = Hashtbl.create 1001
+    { known = Hashtbl.create 1001
     ; cache = Hashtbl.create 1001
     ; alphabet
     ; last = -1

@@ -69,7 +69,6 @@ let f {MinifyArg.common; output_file; use_stdin; files} =
   let free = new Js_traverse.free in
   let _pfree = free#program p in
   let toplevel_def = free#get_def_name in
-  let () = VarPrinter.add_reserved (StringSet.elements toplevel_def) in
   let true_ () = true in
   let open Config in
   let passes : ((unit -> bool) * (unit -> Js_traverse.mapper)) list =
@@ -82,7 +81,9 @@ let f {MinifyArg.common; output_file; use_stdin; files} =
     List.fold_left passes ~init:p ~f:(fun p (t, m) ->
         if t () then (m ())#program p else p)
   in
-  let p = Js_assign.program p in
+  let p =
+    Js_assign.program ~reserved:(StringSet.union toplevel_def Reserved.keyword) p
+  in
   Js_output.program pp p;
   finalize ()
 

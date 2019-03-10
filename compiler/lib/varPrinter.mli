@@ -17,31 +17,23 @@
  * Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA 02111-1307, USA.
  *)
 
-open Stdlib
+open! Stdlib
 
 module Alphabet : sig
   type t
 
   val javascript : t
+
+  val to_string : t -> int -> string
 end
 
 type t
-
-val add_reserved : string list -> unit
-
-val get_reserved : unit -> StringSet.t
 
 val create : ?pretty:bool -> ?stable:bool -> Alphabet.t -> t
 
 val reset : t -> unit
 
-val to_string : t -> ?origin:int -> int -> string
-
-val name : t -> int -> string -> unit
-
-val get_name : t -> int -> string option
-
-val propagate_name : t -> int -> int -> unit
+val to_string : t -> ?names:(int, string) Hashtbl.t -> ?origin:int -> int -> string
 
 val set_pretty : t -> bool -> unit
 
