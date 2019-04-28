@@ -1091,6 +1091,11 @@ let rec translate_expr ctx queue loc _x e level : _ * J.statement_list =
             ( J.ENew (cc, if List.is_empty args then None else Some args)
             , or_p pc prop
             , queue )
+        | Extern "%get_global", [Pv _gdata; Pc (IString name)] ->
+            J.ECall (s_var "require", [str_js name], loc), const_p, queue
+        | Extern "%set_global", [_gdata; Pc (IString _name); c] ->
+            let (pc, cc), queue = access_queue' ~ctx queue c in
+            J.EBin (J.Eq, J.EDot (s_var "module", "exports"), cc), or_p pc const_p, queue
         | Extern "caml_js_get", [Pv o; Pc (String f | IString f)] when J.is_ident f ->
             let (po, co), queue = access_queue queue o in
             J.EDot (co, f), or_p po mutable_p, queue

@@ -42,6 +42,14 @@ let predefined_exceptions =
   ; 10, "Assert_failure"
   ; 11, "Undefined_recursive_module" ]
 
+let max_exception_id =
+  List.fold_left predefined_exceptions ~init:(-1) ~f:(fun acc (i, _) -> max acc i)
+
+let _predefined_exceptions_tbl =
+  let t = Hashtbl.create 17 in
+  List.iter predefined_exceptions ~f:(fun (idx, name) -> Hashtbl.add t name idx);
+  t
+
 (* Read and manipulate debug section *)
 module Debug : sig
   type data
@@ -2152,7 +2160,7 @@ let from_exe
             Let (c, Constant const)
             :: Let
                  ( Var.fresh ()
-                 , Prim (Extern "caml_js_set", [Pv gdata; Pc (String name); Pv c]) )
+                 , Prim (Extern "caml_js_set", [Pv gdata; Pc (IString name); Pv c]) )
             :: rem)
       in
       Let (gdata, Prim (Extern "caml_get_global_data", [])) :: body
@@ -2179,14 +2187,11 @@ let from_exe
       with Exit -> false
   in
   let cmis =
-    let exception_ids =
-      List.fold_left predefined_exceptions ~init:(-1) ~f:(fun acc (i, _) -> max acc i)
-    in
     if toplevel && Config.Flag.include_cmis ()
     then
       Ocaml_compiler.Symtable.GlobalMap.fold
         (fun id num acc ->
-          if num > exception_ids && Ident.global id && is_module (Ident.name id)
+          if num > max_exception_id && Ident.global id && is_module (Ident.name id)
           then StringSet.add (Ident.name id) acc
           else acc)
         symbols
@@ -2337,7 +2342,7 @@ let from_compilation_units ~includes:_ ~toplevel ~debug ~debug_data l =
               Let (x, Constant cst) :: l
           | Some name ->
               Var.name x name;
-              Let (x, Prim (Extern "caml_js_get", [Pv gdata; Pc (IString name)])) :: l)
+              Module_loader.load_global gdata x name :: l)
         | _ -> l)
   in
   let body = Let (gdata, Prim (Extern "caml_get_global_data", [])) :: body in
@@ -2433,17 +2438,15 @@ let predefined_exceptions () =
     List.map predefined_exceptions ~f:(fun (index, name) ->
         let exn = Var.fresh () in
         let v_name = Var.fresh () in
-        let v_name_js = Var.fresh () in
         let v_index = Var.fresh () in
         [ Let (v_name, Constant (String name))
-        ; Let (v_name_js, Prim (Extern "caml_js_from_string", [Pc (IString name)]))
         ; Let (v_index, Constant (Int (Int32.of_int (-index))))
         ; Let (exn, Block (248, [|v_name; v_index|], NotArray))
         ; Let
             ( Var.fresh ()
             , Prim
-                ( Extern "caml_register_global"
-                , [Pc (Int (Int32.of_int index)); Pv exn; Pv v_name_js] ) ) ])
+                ( Extern "%set_global"
+                , [Pc (Int (Int32.of_int index)); Pc (IString name); Pv exn] ) ) ])
     |> List.concat
   in
   let block = {params = []; handler = None; body; branch = Stop} in
