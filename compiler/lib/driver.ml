@@ -60,6 +60,12 @@ let specialize' (p, info) =
   let p = specialize_js (p, info) in
   p, info
 
+let specialize_last (p, info) =
+  let p = specialize_1 (p, info) in
+  let p = specialize_js (p, info) in
+  let p = Specialize.wrap_fun info p in
+  p
+
 let specialize p = fst (specialize' p)
 
 let eval (p, info) = if Config.Flag.staticeval () then Eval.f info p else p
@@ -443,6 +449,8 @@ let f
   configure formatter
   +> specialize_js_once
   +> profile
+  +> flow
+  +> specialize_last
   +> Generate_closure.f
   +> deadcode'
   +> generate d ~exported_runtime

@@ -97,3 +97,66 @@ let specialize_instrs info p =
   { p with blocks; free_pc }
 
 let f info p = specialize_instrs info p
+
+let wrap_fun =
+  let step1 info { blocks; _ } =
+    Addr.Map.fold
+      (fun pc block (blocks, closures) ->
+        let body_rev, closures =
+          List.fold_left block.body ~init:([], closures) ~f:(fun (acc, closures) i ->
+              match i with
+              | Let (x, Closure (l, _cont)) when info.info_possibly_mutable.(Var.idx x) ->
+                  let x' = Var.fork x in
+                  ( Let
+                      ( x'
+                      , Prim
+                          ( Extern "%with_arity"
+                          , [ Pv x; Pc (Int (Int32.of_int (List.length l))) ] ) )
+                    :: i
+                    :: acc
+                  , Var.Map.add x x' closures )
+              | _ -> i :: acc, closures)
+        in
+        let blocks = Addr.Map.add pc { block with body = List.rev body_rev } blocks in
+        blocks, closures)
+      blocks
+      (blocks, Var.Map.empty)
+  in
+  let f info p =
+    let blocks, funs = step1 info p in
+    let subst x =
+      match Var.Map.find x funs with
+      | exception Not_found -> x
+      | y -> y
+    in
+    let subst_prim = function
+      | Pc _ as x -> x
+      | Pv x -> Pv (subst x)
+    in
+    let blocks =
+      Addr.Map.map
+        (fun block ->
+          let body =
+            List.map block.body ~f:(function
+                | Let (x, expr) ->
+                    let expr =
+                      match expr with
+                      | Apply (f, args, false) -> Apply (f, List.map args ~f:subst, false)
+                      | Block (i, vars, e) when false ->
+                          (* This is wrong as function_cardinality can see through block *)
+                          Block (i, Array.map vars ~f:subst, e)
+                      | Block _ -> expr
+                      | Prim (Extern "%with_arity", _) as i -> i
+                      | Prim (p, args) -> Prim (p, List.map args ~f:subst_prim)
+                      | (Constant _ | Field _ | Closure _ | Apply (_, _, true)) as e -> e
+                    in
+                    Let (x, expr)
+                | i -> i)
+          in
+
+          { block with body })
+        blocks
+    in
+    { p with blocks }
+  in
+  f

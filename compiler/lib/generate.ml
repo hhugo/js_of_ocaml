@@ -1053,6 +1053,9 @@ let rec translate_expr ctx queue loc _x e level : _ * J.statement_list =
         | Extern "%closure", [ Pc (IString name | String name) ] ->
             let prim = Share.get_prim (runtime_fun ctx) name ctx.Ctx.share in
             prim, const_p, queue
+        | Extern "%with_arity", [ f; Pc (Int arity) ] ->
+            let (prop, cf), queue = access_queue' ~ctx queue f in
+            J.EObj [ PNI "fun", cf; PNI "arity", int32 arity ], prop, queue
         | Extern "%caml_js_opt_call", f :: o :: l ->
             let (pf, cf), queue = access_queue' ~ctx queue f in
             let (po, co), queue = access_queue' ~ctx queue o in

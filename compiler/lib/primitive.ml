@@ -82,6 +82,8 @@ let register p k kargs arity =
   | _ -> ());
   Hashtbl.add kinds p k
 
+let () = register "%with_arity" `Pure (Some [ `Const; `Const ]) (Some 2)
+
 let alias nm nm' =
   add_external nm';
   add_external nm;

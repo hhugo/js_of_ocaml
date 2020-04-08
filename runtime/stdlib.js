@@ -41,9 +41,14 @@ function raw_array_cons (a,x) {
 //Provides: caml_call_gen (const, shallow)
 //Weakdef
 function caml_call_gen(f, args) {
+  // be smarter here
+  if(f.arity == args.length){
+    return f.fun.apply(null, args);
+  }
   var args_copied = false
 
   while (true) {
+
     if (f.fun) {
       f = f.fun;
       continue;
@@ -232,8 +237,15 @@ function caml_array_bound_error () {
 
 //Provides: caml_update_dummy
 function caml_update_dummy (x, y) {
-  if( typeof y==="function" ) { x.fun = y; return 0; }
-  if( y.fun ) { x.fun = y.fun; return 0; }
+  if( typeof y==="function" ) {
+    x.fun = y;
+    x.arity = y.length;
+    return 0;
+  }
+  if( y.fun ) {
+    x.fun = y.fun;
+    x.arity = x.arity;
+    return 0; }
   var i = y.length; while (i--) x[i] = y[i]; return 0;
 }
 

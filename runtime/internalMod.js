@@ -57,6 +57,7 @@ function caml_CamlinternalMod_update_mod(shape,real,x) {
     switch(shape){
     case 0://function
       real.fun = x;
+      real.arity = x.length;
       break;
     case 1://lazy
     default://case 2://class

@@ -19,3 +19,5 @@
  *)
 
 val f : Flow.info -> Code.program -> Code.program
+
+val wrap_fun : Flow.info -> Code.program -> Code.program
